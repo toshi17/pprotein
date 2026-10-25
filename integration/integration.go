@@ -9,6 +9,7 @@ import (
 	"github.com/felixge/fgprof"
 	"github.com/goccy/go-json"
 	"github.com/gorilla/mux"
+	"github.com/kaz/pprotein/internal/cpustat"
 	"github.com/kaz/pprotein/internal/git"
 	"github.com/kaz/pprotein/internal/tail"
 )
@@ -30,6 +31,8 @@ func RegisterDebugHandlers(r *mux.Router) {
 
 	r.Handle("/debug/log/httplog", tail.NewTailHandler(httplogPath))
 	r.Handle("/debug/log/slowlog", tail.NewTailHandler(slowlogPath))
+
+	r.Handle("/debug/cpu", cpustat.NewCPUStatHandler())
 
 	r.Handle("/debug/fgprof", fgprof.Handler())
 
