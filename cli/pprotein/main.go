@@ -7,6 +7,7 @@ import (
 	"github.com/kaz/pprotein/integration/echov4"
 	"github.com/kaz/pprotein/internal/collect"
 	"github.com/kaz/pprotein/internal/collect/group"
+	"github.com/kaz/pprotein/internal/cpustat"
 	"github.com/kaz/pprotein/internal/event"
 	"github.com/kaz/pprotein/internal/extproc/alp"
 	"github.com/kaz/pprotein/internal/extproc/slp"
@@ -92,6 +93,16 @@ func start() error {
 		EventHub: hub,
 	}
 	if err := memo.NewHandler(memoOpts).Register(api.Group("/memo")); err != nil {
+		return err
+	}
+
+	cpuOpts := &collect.Options{
+		Type:     "cpu",
+		Ext:      "-cpu.log",
+		Store:    store,
+		EventHub: hub,
+	}
+	if err := cpustat.NewHandler(cpuOpts).Register(api.Group("/cpu")); err != nil {
 		return err
 	}
 

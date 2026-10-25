@@ -16,6 +16,9 @@
       <router-link v-slot="{ navigate, isActive }" to="/slowlog/" custom>
         <div :class="{ active: isActive }" @click="navigate">slowlog</div>
       </router-link>
+      <router-link v-slot="{ navigate, isActive }" to="/cpu/" custom>
+        <div :class="{ active: isActive }" @click="navigate">cpu</div>
+      </router-link>
       <router-link v-slot="{ navigate, isActive }" to="/setting/" custom>
         <div :class="{ active: isActive }" @click="navigate">setting</div>
       </router-link>

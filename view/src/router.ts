@@ -8,6 +8,7 @@ import PProfEntry from "./components/PProfEntry.vue";
 import SettingList from "./components/SettingList.vue";
 import SlowLogEntry from "./components/SlowLogEntry.vue";
 import MemoEntry from "./components/MemoEntry.vue";
+import CPUEntry from "./components/CPUEntry.vue";
 
 export default createRouter({
   history: createWebHashHistory(),
@@ -39,6 +40,13 @@ export default createRouter({
           component: PProfEntry,
           meta: {
             title: "pprof:{{id}} | group:{{gid}}",
+          },
+        },
+        {
+          path: "cpu/:id/",
+          component: CPUEntry,
+          meta: {
+            title: "cpu:{{id}} | group:{{gid}}",
           },
         },
         {
@@ -113,6 +121,23 @@ export default createRouter({
       component: SlowLogEntry,
       meta: {
         title: "slowlog:{{id}}",
+      },
+    },
+    {
+      path: "/cpu/",
+      component: EntryList,
+      meta: {
+        title: "cpu",
+      },
+      props: {
+        endpoint: "cpu",
+      },
+    },
+    {
+      path: "/cpu/:id/",
+      component: CPUEntry,
+      meta: {
+        title: "cpu:{{id}}",
       },
     },
     {
