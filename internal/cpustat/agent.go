@@ -1,12 +1,15 @@
 package cpustat
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os/exec"
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -14,8 +17,9 @@ type (
 	CPUStatHandler struct{}
 
 	command struct {
-		name string
-		args []string
+		name   string
+		args   []string
+		format func([]byte) []byte
 	}
 )
 
@@ -31,8 +35,8 @@ func (h *CPUStatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sec := strconv.Itoa(seconds)
 
 	commands := []command{
-		{"mpstat", []string{"-P", "ALL", sec, "1"}},
-		{"pidstat", []string{"-u", "-h", sec, "1"}},
+		{"mpstat", []string{"-P", "ALL", sec, "1"}, nil},
+		{"pidstat", []string{"-u", "-h", sec, "1"}, sortByCPU},
 	}
 
 	outputs := make([][]byte, len(commands))
@@ -58,6 +62,9 @@ func (h *CPUStatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for i, c := range commands {
+		if c.format != nil {
+			outputs[i] = c.format(outputs[i])
+		}
 		fmt.Fprintf(w, "### %s\n\n%s\n", c.name, outputs[i])
 	}
 }
@@ -66,4 +73,30 @@ func run(ctx context.Context, c command) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, c.name, c.args...)
 	cmd.Env = append(cmd.Environ(), "LC_ALL=C", "S_COLORS=never")
 	return cmd.CombinedOutput()
+}
+
+func sortByCPU(out []byte) []byte {
+	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+
+	header := slices.IndexFunc(lines, func(l string) bool { return strings.HasPrefix(l, "# ") })
+	if header < 0 {
+		return out
+	}
+	column := slices.Index(strings.Fields(strings.TrimPrefix(lines[header], "# ")), "%CPU")
+	if column < 0 {
+		return out
+	}
+
+	cpu := func(l string) float64 {
+		fields := strings.Fields(l)
+		if column >= len(fields) {
+			return 0
+		}
+		v, _ := strconv.ParseFloat(fields[column], 64)
+		return v
+	}
+	rows := lines[header+1:]
+	slices.SortStableFunc(rows, func(a, b string) int { return cmp.Compare(cpu(b), cpu(a)) })
+
+	return []byte(strings.Join(lines, "\n") + "\n")
 }
