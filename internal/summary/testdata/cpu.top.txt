@@ -1,0 +1,24 @@
+File: gen
+Type: cpu
+Duration: 2.11s, Total samples = 1.84s (87.03%)
+Showing nodes accounting for 1.84s, 100% of 1.84s total
+      flat  flat%   sum%        cum   cum%
+     1.76s 95.65% 95.65%      1.82s 98.91%  main.burn
+     0.03s  1.63% 97.28%      0.03s  1.63%  runtime.walltime
+     0.01s  0.54% 97.83%      0.01s  0.54%  runtime.(*limiterEvent).stop
+     0.01s  0.54% 98.37%      0.01s  0.54%  runtime.asyncPreempt
+     0.01s  0.54% 98.91%      0.03s  1.63%  runtime.goschedImpl
+     0.01s  0.54% 99.46%      0.04s  2.17%  runtime.newstack
+     0.01s  0.54%   100%      0.02s  1.09%  runtime.pidlegetSpinning
+         0     0%   100%      1.08s 58.70%  main.heavy (inline)
+         0     0%   100%      0.18s  9.78%  main.light (inline)
+         0     0%   100%      1.82s 98.91%  main.main
+         0     0%   100%      0.56s 30.43%  main.medium (inline)
+         0     0%   100%      0.03s  1.63%  runtime.gopreempt_m (inline)
+         0     0%   100%      1.82s 98.91%  runtime.main
+         0     0%   100%      0.02s  1.09%  runtime.morestack
+         0     0%   100%      0.01s  0.54%  runtime.pidleget
+         0     0%   100%      0.02s  1.09%  runtime.wakep
+         0     0%   100%      0.05s  2.72%  time.Now
+         0     0%   100%      0.03s  1.63%  time.now
+         0     0%   100%      0.03s  1.63%  time.runtimeNow
