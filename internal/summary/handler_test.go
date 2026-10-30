@@ -1,15 +1,18 @@
 package summary
 
 import (
+	"bytes"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/goccy/go-json"
+	"github.com/google/pprof/profile"
 	"github.com/kaz/pprotein/internal/collect"
 	"github.com/labstack/echo/v4"
 )
@@ -27,7 +30,7 @@ func newMockAPI(t *testing.T, entries map[string][]*collect.Entry, data map[stri
 			return
 		}
 
-		for _, prefix := range []string{"/api/httplog/", "/api/slowlog/", "/api/cpu/data/"} {
+		for _, prefix := range []string{"/api/httplog/", "/api/slowlog/", "/api/cpu/data/", "/api/pprof/data/"} {
 			if id, ok := strings.CutPrefix(r.URL.Path, prefix); ok {
 				body, ok := data[id]
 				if !ok {
@@ -318,4 +321,102 @@ func TestGroupCommitAndMemo(t *testing.T) {
 	srv, _ = newMockAPI(t, same, data)
 	_, body, _ = get(t, newSummaryEcho(srv), "/api/summary/g1")
 	mustNotContain(t, body, "警告")
+}
+
+func fgprofLikeProfile(t *testing.T) string {
+	t.Helper()
+	wait := &profile.Function{ID: 1, Name: "main.wait", SystemName: "main.wait"}
+	work := &profile.Function{ID: 2, Name: "main.work", SystemName: "main.work"}
+	waitLoc := &profile.Location{ID: 1, Address: 0x1000, Line: []profile.Line{{Function: wait}}}
+	workLoc := &profile.Location{ID: 2, Address: 0x2000, Line: []profile.Line{{Function: work}}}
+	p := &profile.Profile{
+		SampleType: []*profile.ValueType{
+			{Type: "samples", Unit: "count"},
+			{Type: "time", Unit: "nanoseconds"},
+		},
+		DurationNanos: 30e9,
+		Function:      []*profile.Function{wait, work},
+		Location:      []*profile.Location{waitLoc, workLoc},
+		Sample: []*profile.Sample{
+			{Location: []*profile.Location{waitLoc}, Value: []int64{30, 3e9}},
+			{Location: []*profile.Location{workLoc}, Value: []int64{10, 1e9}},
+		},
+	}
+	var buf bytes.Buffer
+	if err := p.Write(&buf); err != nil {
+		t.Fatalf("failed to write profile: %v", err)
+	}
+	return buf.String()
+}
+
+func codeBlockAfter(t *testing.T, section, heading string) []string {
+	t.Helper()
+	_, rest, ok := strings.Cut(section, heading+"\n")
+	if !ok {
+		t.Fatalf("%q not found:\n%s", heading, section)
+	}
+	_, rest, ok = strings.Cut(rest, "```\n")
+	if !ok {
+		t.Fatalf("code block after %q not found:\n%s", heading, section)
+	}
+	block, _, ok := strings.Cut(rest, "```\n")
+	if !ok {
+		t.Fatalf("unterminated code block after %q:\n%s", heading, section)
+	}
+	return strings.Split(strings.TrimSuffix(block, "\n"), "\n")
+}
+
+func TestGroupPprofSections(t *testing.T) {
+	cpu, err := os.ReadFile("testdata/cpu.pprof")
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries := map[string][]*collect.Entry{
+		"pprof": {
+			newEntry("pprof", "p1", "g1", "app1", "http://a/debug/pprof/profile", at(10, 0), collect.StatusOk, "", ""),
+			newEntry("pprof", "p2", "g1", "app1", "http://a/debug/fgprof", at(10, 0), collect.StatusOk, "", ""),
+		},
+	}
+	srv, _ := newMockAPI(t, entries, map[string]string{"p1": string(cpu), "p2": fgprofLikeProfile(t)})
+	code, body, _ := get(t, newSummaryEcho(srv), "/api/summary/g1?top=2")
+	if code != http.StatusOK {
+		t.Fatalf("code = %d: %s", code, body)
+	}
+
+	cpuHeading := "## pprof app1 http://a/debug/pprof/profile\n"
+	fgHeading := "## pprof app1 http://a/debug/fgprof\n"
+	mustContain(t, body, cpuHeading, fgHeading)
+	_, rest, _ := strings.Cut(body, cpuHeading)
+	cpuSec, fgSec, _ := strings.Cut(rest, fgHeading)
+
+	mustContain(t, cpuSec, "Type: cpu", "Duration:", "### flat", "### cum", "main.burn", "上位 2 行")
+	mustContain(t, fgSec, "Type: time", "main.wait", "### flat", "### cum")
+
+	for _, sec := range []string{cpuSec, fgSec} {
+		for _, h := range []string{"### flat", "### cum"} {
+			lines := codeBlockAfter(t, sec, h)
+			if len(lines) > 3 || !strings.Contains(lines[0], "flat%") {
+				t.Errorf("%s block = %q", h, lines)
+			}
+		}
+	}
+}
+
+func TestGroupPprofFailures(t *testing.T) {
+	entries := map[string][]*collect.Entry{
+		"pprof": {
+			newEntry("pprof", "p1", "g1", "app1", "http://a/1", at(10, 0), collect.StatusOk, "", ""),
+			newEntry("pprof", "p2", "g1", "app1", "http://a/2", at(10, 0), collect.StatusOk, "", ""),
+			newEntry("pprof", "p3", "g1", "app1", "http://a/3", at(10, 0), collect.StatusFail, "boom", ""),
+		},
+	}
+	srv, called := newMockAPI(t, entries, map[string]string{"p2": "not a profile"})
+	code, body, _ := get(t, newSummaryEcho(srv), "/api/summary/g1")
+	if code != http.StatusOK {
+		t.Fatalf("code = %d: %s", code, body)
+	}
+	mustContain(t, body, "取得に失敗:", "集計に失敗:", "status: fail: boom")
+	if _, ok := called.Load("/api/pprof/data/p3"); ok {
+		t.Errorf("/api/pprof/data/p3 must not be called")
+	}
 }

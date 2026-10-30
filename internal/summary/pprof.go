@@ -147,3 +147,38 @@ func cumValue(row string) float64 {
 	}
 	return v
 }
+
+func writePprof(b *strings.Builder, data string, source string, top int) {
+	r, err := topOf(data, source)
+	if err != nil {
+		fmt.Fprintf(b, "集計に失敗: %s\n", oneLineReplacer.Replace(err.Error()))
+		return
+	}
+
+	shown := min(top, len(r.rows))
+	fmt.Fprintf(b, "全 %d 行中 上位 %d 行\n\n", len(r.rows), shown)
+	writeBlock(b, joinLines(r.header))
+	fmt.Fprintf(b, "\n### flat\n\n")
+	writeBlock(b, joinLines(append([]string{r.columns}, r.rows[:shown]...)))
+	fmt.Fprintf(b, "\n### cum\n\nsum%% は flat 順の累積のまま\n\n")
+	writeBlock(b, joinLines(append([]string{r.columns}, r.byCum()[:shown]...)))
+}
+
+func topOf(data string, source string) (*topReport, error) {
+	p, err := profile.Parse(strings.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	out, err := runTop(p, source)
+	if err != nil {
+		return nil, err
+	}
+	return parseTop(out)
+}
+
+func joinLines(lines []string) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
