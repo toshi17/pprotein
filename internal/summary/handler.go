@@ -33,6 +33,7 @@ var (
 		"httplog": {path: func(id string) string { return "/api/httplog/" + url.PathEscape(id) }, column: "Sum"},
 		"slowlog": {path: func(id string) string { return "/api/slowlog/" + id }, column: "Sum(QueryTime)"},
 		"cpu":     {path: func(id string) string { return "/api/cpu/data/" + id }},
+		"pprof":   {path: func(id string) string { return "/api/pprof/data/" + id }},
 	}
 
 	cellReplacer    = strings.NewReplacer("|", `\|`, "\r\n", " ", "\n", " ", "\r", " ")
@@ -259,6 +260,11 @@ func (h *Handler) writeSection(b *strings.Builder, e *collect.Entry, sec section
 		writeBlock(b, mpstat)
 		fmt.Fprintf(b, "\n### pidstat\n\n")
 		writeBlock(b, pidstat)
+		return
+	}
+
+	if e.Snapshot.Type == "pprof" {
+		writePprof(b, text, e.Snapshot.ID, top)
 		return
 	}
 
