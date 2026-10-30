@@ -2,9 +2,13 @@ package summary
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
+	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/pprof/driver"
@@ -83,4 +87,63 @@ func runTop(p *profile.Profile, source string) (string, error) {
 		return "", errors.New("pprof の出力が空")
 	}
 	return w.buf.String(), nil
+}
+
+type topReport struct {
+	header  []string
+	columns string
+	rows    []string
+}
+
+func parseTop(out string) (*topReport, error) {
+	lines := strings.Split(out, "\n")
+	for i, line := range lines {
+		f := strings.Fields(line)
+		if len(f) < 5 || !slices.Equal(f[:5], []string{"flat", "flat%", "sum%", "cum", "cum%"}) {
+			continue
+		}
+		r := &topReport{header: lines[:i], columns: line}
+		for _, row := range lines[i+1:] {
+			if strings.TrimSpace(row) != "" {
+				r.rows = append(r.rows, row)
+			}
+		}
+		return r, nil
+	}
+	return nil, errors.New("pprof の出力に列見出しがない")
+}
+
+func (r *topReport) byCum() []string {
+	rows := slices.Clone(r.rows)
+	slices.SortStableFunc(rows, func(a, b string) int {
+		return cmp.Compare(cumValue(b), cumValue(a))
+	})
+	return rows
+}
+
+var unitScales = map[string]float64{
+	"ns": 1, "us": 1e3, "ms": 1e6, "s": 1e9, "hrs": 3600e9,
+	"B": 1, "kB": 1 << 10, "MB": 1 << 20, "GB": 1 << 30, "TB": 1 << 40, "PB": 1 << 50,
+	"n*GCU": 1e-9, "u*GCU": 1e-6, "m*GCU": 1e-3, "GCU": 1, "k*GCU": 1e3, "M*GCU": 1e6, "G*GCU": 1e9, "T*GCU": 1e12, "P*GCU": 1e15,
+}
+
+// cum% は 1% 未満が有効数字 2 桁で潰れるため、単位付きの cum 列を数値化して比べる
+func cumValue(row string) float64 {
+	f := strings.Fields(row)
+	if len(f) < 4 {
+		return 0
+	}
+	s := f[3]
+	i := 0
+	for i < len(s) && (s[i] == '.' || s[i] == '-' || s[i] == '+' || s[i] >= '0' && s[i] <= '9') {
+		i++
+	}
+	v, err := strconv.ParseFloat(s[:i], 64)
+	if err != nil {
+		return 0
+	}
+	if scale, ok := unitScales[s[i:]]; ok {
+		v *= scale
+	}
+	return v
 }
