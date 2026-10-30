@@ -14,6 +14,7 @@ import (
 	"github.com/kaz/pprotein/internal/memo"
 	"github.com/kaz/pprotein/internal/pprof"
 	"github.com/kaz/pprotein/internal/storage"
+	"github.com/kaz/pprotein/internal/summary"
 	"github.com/kaz/pprotein/view"
 	"github.com/labstack/echo/v4"
 )
@@ -111,6 +112,7 @@ func start() error {
 		return err
 	}
 	grp.RegisterHandlers(api.Group("/group"))
+	summary.NewHandler("http://localhost:" + port).RegisterHandlers(api.Group("/summary"))
 
 	return e.Start(":" + port)
 }
