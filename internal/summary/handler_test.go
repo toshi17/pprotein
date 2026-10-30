@@ -138,7 +138,7 @@ func TestIndexLabelFilterAndEmpty(t *testing.T) {
 			newEntry("httplog", "h2", "g1", "app2", "http://b/log", at(10, 0), collect.StatusOk, "", ""),
 		},
 		"memo": {
-			newEntry("memo", "m1", "g1", "app1", "", at(10, 0), collect.StatusOk, "", ""),
+			newEntry("memo", "m1", "g1", "", "", at(10, 0), collect.StatusOk, "", ""),
 		},
 	}
 	srv, _ := newMockAPI(t, entries, nil)
@@ -146,12 +146,12 @@ func TestIndexLabelFilterAndEmpty(t *testing.T) {
 
 	_, body, _ := get(t, e, "/api/summary")
 	mustContain(t, body,
-		"| g1 | 2026-10-30T10:00:00Z | app1 | ok | - | - | - | ok | - |",
-		"| g1 | 2026-10-30T10:00:00Z | app2 | ok | - | - | - | - | - |",
+		"| g1 | 2026-10-30T10:00:00Z | app1 | ok | - | - | - | 1 | - |",
+		"| g1 | 2026-10-30T10:00:00Z | app2 | ok | - | - | - | 1 | - |",
 	)
 
 	_, body, _ = get(t, e, "/api/summary?label=app2")
-	mustContain(t, body, "| g1 | 2026-10-30T10:00:00Z | app2 | ok | - | - | - | - | - |")
+	mustContain(t, body, "| g1 | 2026-10-30T10:00:00Z | app2 | ok | - | - | - | 1 | - |")
 	mustNotContain(t, body, "| app1 |")
 
 	empty, _ := newMockAPI(t, nil, nil)

@@ -40,8 +40,6 @@ func topTSV(tsv string, column string, top int) (string, int, bool) {
 		})
 	}
 
-	if top < len(rows) {
-		rows = rows[:top]
-	}
+	rows = rows[:min(top, len(rows))]
 	return strings.Join(append([]string{header}, rows...), "\n") + "\n", total, sorted
 }

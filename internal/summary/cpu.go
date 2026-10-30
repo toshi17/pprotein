@@ -64,6 +64,6 @@ func summarizePidstat(section []string, top int) string {
 		slices.SortStableFunc(rows, func(a, b string) int { return cmp.Compare(cpu(b), cpu(a)) })
 	}
 
-	rows = rows[:max(0, min(top, len(rows)))]
+	rows = rows[:min(top, len(rows))]
 	return strings.Join(append([]string{section[header]}, rows...), "\n") + "\n"
 }

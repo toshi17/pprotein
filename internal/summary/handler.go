@@ -83,30 +83,23 @@ func (h *Handler) getIndex(c echo.Context) error {
 	fmt.Fprintf(b, "| GroupId | 時刻 | Label | httplog | slowlog | cpu | pprof | memo | commit |\n")
 	fmt.Fprintf(b, "| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
 	for _, g := range groups {
+		memos := 0
+		for _, e := range g.Entries {
+			if e.Snapshot.Type == "memo" {
+				memos++
+			}
+		}
+		memo := "-"
+		if memos > 0 {
+			memo = strconv.Itoa(memos)
+		}
 		for _, label := range labelsOf(g.Entries, statusTypes) {
 			cells := []string{g.ID, g.Time.Format(time.RFC3339), label}
-			for _, typ := range listTypes {
+			for _, typ := range statusTypes {
 				cells = append(cells, statuses(g.Entries, typ, label))
 			}
-
-			var hashes []string
-			for _, e := range g.Entries {
-				if e.Snapshot.Type != "memo" && e.Snapshot.Label == label {
-					if hash := shortHash(e); hash != "" && !slices.Contains(hashes, hash) {
-						hashes = append(hashes, hash)
-					}
-				}
-			}
-			commit := "-"
-			if len(hashes) > 0 {
-				commit = "`" + strings.Join(hashes, "`, `") + "`"
-			}
-			cells = append(cells, commit)
-
-			for i := range cells {
-				cells[i] = cellReplacer.Replace(cells[i])
-			}
-			fmt.Fprintf(b, "| %s |\n", strings.Join(cells, " | "))
+			cells = append(cells, memo, commits(g.Entries, label))
+			writeRow(b, cells)
 		}
 	}
 	return markdown(c, b)
@@ -130,10 +123,8 @@ func (h *Handler) getGroup(c echo.Context) error {
 		if len(groups) > 0 {
 			g = groups[0]
 		}
-	} else {
-		if i := slices.IndexFunc(groups, func(g *group) bool { return g.ID == id }); i >= 0 {
-			g = groups[i]
-		}
+	} else if i := slices.IndexFunc(groups, func(g *group) bool { return g.ID == id }); i >= 0 {
+		g = groups[i]
 	}
 	if g == nil {
 		return echo.NewHTTPError(http.StatusNotFound, "group not found")
@@ -157,7 +148,7 @@ func (h *Handler) getGroup(c echo.Context) error {
 	b := &strings.Builder{}
 	fmt.Fprintf(b, "# pprotein summary %s\n\n", g.ID)
 	fmt.Fprintf(b, "- 時刻: %s\n", g.Time.Format(time.RFC3339))
-	h.writeCommits(b, snapshots)
+	writeCommits(b, snapshots)
 
 	var missing []string
 	for _, typ := range statusTypes {
@@ -178,11 +169,7 @@ func (h *Handler) getGroup(c echo.Context) error {
 		if e.Status != collect.StatusOk {
 			msg = e.Message
 		}
-		cells := []string{e.Snapshot.Type, e.Snapshot.Label, e.Snapshot.URL, string(e.Status), msg}
-		for i := range cells {
-			cells[i] = cellReplacer.Replace(cells[i])
-		}
-		fmt.Fprintf(b, "| %s |\n", strings.Join(cells, " | "))
+		writeRow(b, []string{e.Snapshot.Type, e.Snapshot.Label, e.Snapshot.URL, string(e.Status), msg})
 	}
 
 	fmt.Fprintf(b, "\n## memo\n\n")
@@ -208,7 +195,14 @@ func (h *Handler) getGroup(c echo.Context) error {
 	return markdown(c, b)
 }
 
-func (h *Handler) writeCommits(b *strings.Builder, snapshots []*collect.Entry) {
+func writeRow(b *strings.Builder, cells []string) {
+	for i := range cells {
+		cells[i] = cellReplacer.Replace(cells[i])
+	}
+	fmt.Fprintf(b, "| %s |\n", strings.Join(cells, " | "))
+}
+
+func writeCommits(b *strings.Builder, snapshots []*collect.Entry) {
 	fmt.Fprintf(b, "- commit\n")
 
 	var all []string
@@ -314,6 +308,21 @@ func statuses(entries []*collect.Entry, typ string, label string) string {
 		return "-"
 	}
 	return strings.Join(r, ", ")
+}
+
+func commits(entries []*collect.Entry, label string) string {
+	var hashes []string
+	for _, e := range entries {
+		if e.Snapshot.Type != "memo" && e.Snapshot.Label == label {
+			if hash := shortHash(e); hash != "" && !slices.Contains(hashes, hash) {
+				hashes = append(hashes, hash)
+			}
+		}
+	}
+	if len(hashes) == 0 {
+		return "-"
+	}
+	return "`" + strings.Join(hashes, "`, `") + "`"
 }
 
 func shortHash(e *collect.Entry) string {
