@@ -24,7 +24,7 @@ type (
 	}
 
 	topWriter struct {
-		buf *bytes.Buffer
+		buf bytes.Buffer
 	}
 
 	nopWriteCloser struct {
@@ -42,7 +42,7 @@ func (w *topWriter) Open(name string) (io.WriteCloser, error) {
 	if name != topOutputName {
 		return nil, fmt.Errorf("unexpected output: %s", name)
 	}
-	return nopWriteCloser{w.buf}, nil
+	return nopWriteCloser{&w.buf}, nil
 }
 
 func (nopWriteCloser) Close() error {
@@ -72,7 +72,7 @@ func topArgs(source string) []string {
 }
 
 func runTop(p *profile.Profile, source string) (string, error) {
-	w := &topWriter{&bytes.Buffer{}}
+	w := &topWriter{}
 	options := &driver.Options{
 		Flagset: pprof.NewFlagSet(topArgs(source)),
 		Fetch:   &topFetcher{p},

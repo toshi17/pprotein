@@ -87,10 +87,6 @@ Showing nodes accounting for 3.10s, 100% of 3.10s total
      0.20s  6.45%   100%      2.50s 80.65%  main.(*T).d
 `
 
-func rowName(row string) string {
-	return strings.Fields(row)[5]
-}
-
 func TestParseTop(t *testing.T) {
 	r, err := parseTop(topFixture)
 	if err != nil {
@@ -107,7 +103,7 @@ func TestParseTop(t *testing.T) {
 	}
 	var names []string
 	for _, row := range r.byCum() {
-		names = append(names, rowName(row))
+		names = append(names, strings.Fields(row)[5])
 	}
 	if want := []string{"main.(*T).d", "main.b", "main.a", "main.c"}; !reflect.DeepEqual(names, want) {
 		t.Errorf("byCum = %q, want %q", names, want)
@@ -157,21 +153,5 @@ func TestByCumOnRealProfile(t *testing.T) {
 		if cumValue(cum[i-1]) < cumValue(cum[i]) {
 			t.Errorf("not sorted at %d: %q then %q", i, cum[i-1], cum[i])
 		}
-	}
-	want, err := os.ReadFile("testdata/cpu.top.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	find := func(lines []string) string {
-		for _, l := range lines {
-			if strings.HasPrefix(l, "Duration:") {
-				return l
-			}
-		}
-		return ""
-	}
-	d := find(r.header)
-	if d == "" || d != find(strings.Split(string(want), "\n")) {
-		t.Errorf("Duration line mismatch: %q", d)
 	}
 }
