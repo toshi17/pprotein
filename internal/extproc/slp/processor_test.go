@@ -32,3 +32,34 @@ func TestRewritePGExecuteLines(t *testing.T) {
 		t.Errorf("got:\n%s\nwant:\n%s", out.String(), want)
 	}
 }
+
+func TestRewritePGExecuteLinesJoinsStatementStartingWithNewline(t *testing.T) {
+	in := strings.Join([]string{
+		"2026-10-31 02:05:24.421 UTC [16590] LOG:  duration: 2.150 ms  bind stmtcache_a: ",
+		"\t   SELECT i.data",
+		"2026-10-31 02:05:24.423 UTC [16590] LOG:  duration: 1.966 ms  execute stmtcache_a: ",
+		"\t   SELECT i.data, i.media_type",
+		"\t   FROM image_objects i",
+		"2026-10-31 02:05:24.423 UTC [16590] DETAIL:  parameters: $1 = 'x'",
+		"2026-10-31 02:05:24.500 UTC [16591] LOG:  duration: 3.000 ms  statement: ",
+		"2026-10-31 02:05:24.600 UTC [16592] LOG:  duration: 4.000 ms  execute stmtcache_b: ",
+		"\tUPDATE users SET name = $1",
+	}, "\n")
+	want := strings.Join([]string{
+		"2026-10-31 02:05:24.421 UTC [16590] LOG:  duration: 2.150 ms  bind stmtcache_a: ",
+		"\t   SELECT i.data",
+		"2026-10-31 02:05:24.423 UTC [16590] LOG:  duration: 1.966 ms  statement: SELECT i.data, i.media_type",
+		"\t   FROM image_objects i",
+		"2026-10-31 02:05:24.423 UTC [16590] DETAIL:  parameters: $1 = 'x'",
+		"2026-10-31 02:05:24.500 UTC [16591] LOG:  duration: 3.000 ms  statement: ",
+		"2026-10-31 02:05:24.600 UTC [16592] LOG:  duration: 4.000 ms  statement: UPDATE users SET name = $1",
+	}, "\n")
+
+	var out bytes.Buffer
+	if err := rewritePGExecuteLines(strings.NewReader(in), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != want {
+		t.Errorf("got:\n%s\nwant:\n%s", out.String(), want)
+	}
+}

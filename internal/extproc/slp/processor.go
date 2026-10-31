@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strings"
 
 	"github.com/kaz/pprotein/internal/collect"
 )
@@ -21,6 +22,9 @@ type (
 
 // slp pg は "statement:" の行だけを集計するため、拡張プロトコルのドライバーが出す "execute <name>:" の行を書き換える
 var pgExecuteRe = regexp.MustCompile(`(LOG:\s+duration:\s+[0-9.]+\s+ms\s+)execute [^:]*:`)
+
+// slp pg は "statement:" の後ろが同じ行で空だとエントリを捨てるため、改行から始まる SQL は次の行を連結する
+var pgEmptyStatementRe = regexp.MustCompile(`LOG:\s+duration:\s+[0-9.]+\s+ms\s+statement:[ \t]*\r?\n$`)
 
 func (p *processor) Cacheable() bool {
 	return true
@@ -76,14 +80,29 @@ func rewritePGExecute(path string) (string, error) {
 func rewritePGExecuteLines(r io.Reader, w io.Writer) error {
 	br := bufio.NewReader(r)
 	bw := bufio.NewWriter(w)
+	pending := ""
 	for {
 		line, err := br.ReadString('\n')
 		if len(line) > 0 {
-			if _, werr := bw.WriteString(pgExecuteRe.ReplaceAllString(line, "${1}statement:")); werr != nil {
+			line = pgExecuteRe.ReplaceAllString(line, "${1}statement:")
+			if pending != "" {
+				if strings.HasPrefix(line, "\t") || strings.HasPrefix(line, " ") {
+					line = strings.TrimRight(pending, " \t\r\n") + " " + strings.TrimLeft(line, " \t")
+				} else if _, werr := bw.WriteString(pending); werr != nil {
+					return werr
+				}
+				pending = ""
+			}
+			if pgEmptyStatementRe.MatchString(line) {
+				pending = line
+			} else if _, werr := bw.WriteString(line); werr != nil {
 				return werr
 			}
 		}
 		if err == io.EOF {
+			if _, werr := bw.WriteString(pending); werr != nil {
+				return werr
+			}
 			return bw.Flush()
 		}
 		if err != nil {
