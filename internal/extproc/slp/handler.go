@@ -3,6 +3,7 @@ package slp
 import (
 	_ "embed"
 	"fmt"
+	"os"
 
 	"github.com/kaz/pprotein/internal/collect"
 	"github.com/kaz/pprotein/internal/extproc"
@@ -16,6 +17,7 @@ type (
 	handler struct {
 		opts   *collect.Options
 		config *persistent.Handler
+		db     string
 	}
 )
 
@@ -25,6 +27,10 @@ var defaultConfig []byte
 func NewHandler(opts *collect.Options, store storage.Storage) (*handler, error) {
 	h := &handler{
 		opts: opts,
+		db:   os.Getenv("PPROTEIN_SLOWLOG_DB"),
+	}
+	if h.db != "" && h.db != "mysql" && h.db != "postgresql" {
+		return nil, fmt.Errorf("PPROTEIN_SLOWLOG_DB must be mysql or postgresql: %q", h.db)
 	}
 
 	config, err := persistent.New(store, "slp.yml", defaultConfig, h.sanitize)
@@ -39,7 +45,7 @@ func NewHandler(opts *collect.Options, store storage.Storage) (*handler, error) 
 func (h *handler) Register(g *echo.Group) error {
 	h.config.RegisterHandlers(g.Group("/config"))
 
-	if err := extproc.NewHandler(&processor{confPath: h.config.GetPath()}, h.opts).Register(g); err != nil {
+	if err := extproc.NewHandler(&processor{confPath: h.config.GetPath(), db: h.db}, h.opts).Register(g); err != nil {
 		return fmt.Errorf("failed to register extproc handlers: %w", err)
 	}
 	return nil
